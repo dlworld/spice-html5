@@ -28,6 +28,7 @@ import { SpiceConn } from './spiceconn.js';
 import { SpiceRect } from './spicetype.js';
 import { convert_spice_lz_to_web } from './lz.js';
 import { convert_spice_bitmap_to_web } from './bitmap.js';
+import { H264Decoder } from './h264.js';
 
 /*----------------------------------------------------------------------------
 **  FIXME: putImageData  does not support Alpha blending
@@ -67,11 +68,16 @@ function stripAlpha(d)
 function SpiceDisplayConn()
 {
     SpiceConn.apply(this, arguments);
+    this.h264decoder = null;
+    this.log_info("SpiceDisplayConn initializing - Channel ID: " + this.chan_id);
+    this.log_info("SpiceDisplayConn initialization complete");
 }
 
 SpiceDisplayConn.prototype = Object.create(SpiceConn.prototype);
 SpiceDisplayConn.prototype.process_channel_message = function(msg)
 {
+    this.log_info("Processing display message - Type: " + msg.type + ", Channel ID: " + this.chan_id);
+
     if (msg.type == Constants.SPICE_MSG_DISPLAY_MODE)
     {
         this.known_unimplemented(msg.type, "Display Mode");
@@ -431,6 +437,109 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
         return true;
     }
 
+    if (msg.type == Constants.SPICE_MSG_DISPLAY_STREAM_CREATE)
+    {
+        var stream_create = new Messages.SpiceMsgDisplayStreamCreate(msg.data);
+        Utils.DEBUG > 0 && console.log("Stream create id: " + stream_create.id + 
+                                     " type: " + stream_create.codec_type +
+                                     " width: " + stream_create.stream_width + 
+                                     " height: " + stream_create.stream_height);
+
+        if (stream_create.codec_type == Constants.SPICE_VIDEO_CODEC_TYPE_H264) {
+            this.log_info("Starting H264 decoder initialization...");
+            this.log_info("Video stream parameters - Width: " + stream_create.stream_width + ", Height: " + stream_create.stream_height + ", Codec: H264");
+            this.log_info("Browser WebAssembly support: " + (typeof WebAssembly !== 'undefined' ? 'Supported' : 'Not supported'));
+            this.log_info("Browser hardware acceleration: " + (window.navigator.hardwareConcurrency > 1 ? 'Available (CPU cores: ' + window.navigator.hardwareConcurrency + ')' : 'Not available'));
+            this.log_info("Browser VideoDecoder API support: " + (typeof window.VideoDecoder !== 'undefined' ? 'Supported' : 'Not supported'));
+            
+            if (!this.h264decoder) {
+                try {
+                    this.h264decoder = new H264Decoder();
+                    this.log_info("H264 decoder instance created, starting configuration...");
+                    this.h264decoder.init(stream_create.stream_width, stream_create.stream_height)
+                        .then(() => {
+                            this.log_info("H264 decoder initialization completed, ready to receive video stream data");
+                        })
+                        .catch((e) => {
+                            this.log_warn("H264 decoder initialization failed");
+                            this.log_warn("Error details: " + e.message);
+                            this.log_warn("Error stack: " + e.stack);
+                            if (e instanceof DOMException) {
+                                this.log_warn("DOM Exception code: " + e.code + ", name: " + e.name);
+                            }
+                            this.log_info("System information:");
+                            this.log_info("- User agent: " + navigator.userAgent);
+                            this.log_info("- Platform: " + navigator.platform);
+                            this.log_info("- Memory: " + (navigator.deviceMemory ? navigator.deviceMemory + 'GB' : 'Unknown'));
+                            this.h264decoder = null;
+                        });
+                } catch (e) {
+                    this.log_warn("Failed to create H264 decoder instance");
+                    this.log_warn("Error details: " + e.message);
+                    this.h264decoder = null;
+                    return false;
+                }
+            } else {
+                this.log_info("H264 decoder already initialized");
+            }
+            return true;
+        } else {
+            this.log_warn("Unsupported video codec type: " + stream_create.codec_type);
+            return false;
+        }
+        return true;
+    }
+
+    if (msg.type == Constants.SPICE_MSG_DISPLAY_STREAM_DATA)
+    {
+        var stream_data = new Messages.SpiceMsgDisplayStreamData(msg.data);
+        
+        if (this.h264decoder) {
+            try {
+                this.log_info("Decoding H264 frame with size: " + stream_data.data.byteLength + " bytes");
+                const isKeyFrame = (stream_data.flags & Constants.SPICE_STREAM_FLAGS_TOP_DOWN) !== 0;
+                this.h264decoder.decode({
+                    data: stream_data.data,
+                    timestamp: performance.now(),
+                    duration: 0,
+                    keyFrame: isKeyFrame
+                }).then(frame => {
+                    if (frame) {
+                        this.log_info("Successfully decoded H264 frame");
+                        var surface = this.surfaces[this.primary_surface];
+                        surface.canvas.context.drawImage(frame, 
+                            stream_data.dest.left, stream_data.dest.top,
+                            stream_data.dest.right - stream_data.dest.left,
+                            stream_data.dest.bottom - stream_data.dest.top);
+                    } else {
+                        this.log_warn("H264 decoder returned empty frame");
+                    }
+                }).catch(e => {
+                    this.log_warn("H264 frame decode failed: " + e.message);
+                    if (e instanceof DOMException) {
+                        this.log_warn("DOM Exception code: " + e.code + ", name: " + e.name);
+                    }
+                });
+                return true;
+            } catch (e) {
+                this.log_warn("Failed to decode H264 frame: " + e);
+            }
+        }
+        return true;
+    }
+
+    if (msg.type == Constants.SPICE_MSG_DISPLAY_STREAM_DESTROY)
+    {
+        var stream_destroy = new Messages.SpiceMsgDisplayStreamDestroy(msg.data);
+        Utils.DEBUG > 0 && console.log("Stream destroy id: " + stream_destroy.id);
+        
+        if (this.h264decoder) {
+            this.h264decoder.destroy();
+            this.h264decoder = null;
+        }
+        return true;
+    }
+
     if (msg.type == Constants.SPICE_MSG_DISPLAY_COPY_BITS)
     {
         var copy_bits = new Messages.SpiceMsgDisplayCopyBits(msg.data);
@@ -590,6 +699,23 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
             media.spiceconn = this;
             v.spice_stream = s;
         }
+        else if (m.codec_type == Constants.SPICE_VIDEO_CODEC_TYPE_H264) {
+            this.log_info("Starting H264 decoder initialization...");
+            this.log_info("Video stream parameters - Width: " + m.stream_width + ", Height: " + m.stream_height + ", Codec: H264");
+            this.log_info("Browser WebAssembly support: " + (typeof WebAssembly !== 'undefined' ? 'Supported' : 'Not supported'));
+            this.log_info("Browser hardware acceleration: " + (window.navigator.hardwareConcurrency > 1 ? 'Available (CPU cores: ' + window.navigator.hardwareConcurrency + ')' : 'Not available'));
+            
+            try {
+                this.h264decoder = new H264Decoder();
+                this.h264decoder.init(m.stream_width, m.stream_height).then(() => {
+                    this.log_info("H264 decoder initialized successfully");
+                }).catch(e => {
+                    this.log_warn("H264 decoder initialization failed: " + e.message);
+                });
+            } catch (e) {
+                this.log_warn("Failed to create H264 decoder: " + e.message);
+            }
+        }
         else if (m.codec_type == Constants.SPICE_VIDEO_CODEC_TYPE_MJPEG)
             this.streams[m.id].frames_loading = 0;
         else
@@ -614,11 +740,25 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
 
         var time_until_due = m.base.multi_media_time - this.parent.relative_now();
 
-        if (this.streams[m.base.id].codec_type === Constants.SPICE_VIDEO_CODEC_TYPE_MJPEG)
+        if (this.streams[m.base.id].codec_type === Constants.SPICE_VIDEO_CODEC_TYPE_MJPEG) {
             process_mjpeg_stream_data(this, m, time_until_due);
-
-        if (this.streams[m.base.id].codec_type === Constants.SPICE_VIDEO_CODEC_TYPE_VP8)
+        } else if (this.streams[m.base.id].codec_type === Constants.SPICE_VIDEO_CODEC_TYPE_VP8) {
             process_video_stream_data(this.streams[m.base.id], m);
+        } else if (this.streams[m.base.id].codec_type === Constants.SPICE_VIDEO_CODEC_TYPE_H264 && this.h264decoder) {
+            try {
+                const encodedChunk = {
+                    data: m.data,
+                    timestamp: m.base.multi_media_time,
+                    duration: 0,
+                    keyFrame: true // Assuming all frames are key frames for now
+                };
+                this.h264decoder.decode(encodedChunk).catch(e => {
+                    this.log_warn("H264 decode error: " + e.message);
+                });
+            } catch (e) {
+                this.log_warn("Error processing H264 stream data: " + e.message);
+            }
+        }
 
         return true;
     }

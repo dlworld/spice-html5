@@ -152,6 +152,12 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
         chans = new Messages.SpiceMsgChannels(msg.data);
         for (i = 0; i < chans.channels.length; i++)
         {
+            this.log_info("Initializing channel - Index: " + i + ", ID: " + chans.channels[i].id + ", Type: " + 
+                    (chans.channels[i].type === Constants.SPICE_CHANNEL_DISPLAY ? "Display" :
+                     chans.channels[i].type === Constants.SPICE_CHANNEL_INPUTS ? "Inputs" :
+                     chans.channels[i].type === Constants.SPICE_CHANNEL_CURSOR ? "Cursor" :
+                     chans.channels[i].type === Constants.SPICE_CHANNEL_PLAYBACK ? "Playback" :
+                     chans.channels[i].type === Constants.SPICE_CHANNEL_PORT ? "Port" : "Unknown"));
             var conn = {
                         uri: this.ws.url,
                         parent: this,
@@ -162,9 +168,12 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
             if (chans.channels[i].type == Constants.SPICE_CHANNEL_DISPLAY)
             {
                 if (chans.channels[i].id == 0) {
+                    this.log_warn("Skip display channel 0.");
+                } else if (chans.channels[i].id == 1) {
+                    this.log_warn("Display channel 1.");
                     this.display = new SpiceDisplayConn(conn);
                 } else {
-                    this.log_warn("The spice-html5 client does not handle multiple heads.");
+                    this.log_warn("The spice-html5 client does not handle multiple heads." + chans.channels[i].id);
                 }
             }
             else if (chans.channels[i].type == Constants.SPICE_CHANNEL_INPUTS)

@@ -24,9 +24,9 @@ import { code_to_scancode } from './code_to_scancode.js';
 /*----------------------------------------------------------------------------
 **  Utility settings and functions for Spice
 **--------------------------------------------------------------------------*/
-var DEBUG = 0;
+var DEBUG = 1;
 var PLAYBACK_DEBUG = 0;
-var STREAM_DEBUG = 0;
+var STREAM_DEBUG = 1;
 var DUMP_DRAWS = false;
 var DUMP_CANVASES = false;
 

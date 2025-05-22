@@ -58,6 +58,16 @@ function SpiceConn(o)
     this.connection_id = o.connection_id !== undefined ? o.connection_id : 0;
     this.type = o.type !== undefined ? o.type : Constants.SPICE_CHANNEL_MAIN;
     this.chan_id = o.chan_id !== undefined ? o.chan_id : 0;
+    
+    // Log connection initialization details
+    console.log("Initializing Spice connection - Type: " + (this.type === Constants.SPICE_CHANNEL_MAIN ? "Main" : 
+                                                          this.type === Constants.SPICE_CHANNEL_DISPLAY ? "Display" : 
+                                                          this.type === Constants.SPICE_CHANNEL_INPUTS ? "Inputs" : 
+                                                          this.type === Constants.SPICE_CHANNEL_CURSOR ? "Cursor" : 
+                                                          this.type === Constants.SPICE_CHANNEL_PLAYBACK ? "Playback" : 
+                                                          "Unknown") + 
+                " Channel, ID: " + this.chan_id + ", Connection ID: " + this.connection_id);
+
     if (o.parent !== undefined)
     {
         this.parent = o.parent;
@@ -164,9 +174,14 @@ SpiceConn.prototype =
                         (1 << Constants.SPICE_DISPLAY_CAP_STREAM_REPORT) |
                         (1 << Constants.SPICE_DISPLAY_CAP_MULTI_CODEC) |
                         (1 << Constants.SPICE_DISPLAY_CAP_CODEC_MJPEG);
-            if ('MediaSource' in window && MediaSource.isTypeSupported(Webm.Constants.SPICE_VP8_CODEC))
-                caps |= (1 << Constants.SPICE_DISPLAY_CAP_CODEC_VP8);
+            if ('MediaSource' in window) {
+                if (MediaSource.isTypeSupported(Webm.Constants.SPICE_VP8_CODEC))
+                    caps |= (1 << Constants.SPICE_DISPLAY_CAP_CODEC_VP8);
+                if (MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"'))
+                    caps |= (1 << Constants.SPICE_DISPLAY_CAP_CODEC_H264);
+            }
             msg.channel_caps.push(caps);
+            DEBUG > 0 && console.log("Display caps: " + msg.channel_caps[0].toString(16));
         }
 
         hdr.size = msg.buffer_size();
