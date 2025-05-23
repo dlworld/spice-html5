@@ -167,13 +167,26 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
                     };
             if (chans.channels[i].type == Constants.SPICE_CHANNEL_DISPLAY)
             {
-                if (chans.channels[i].id == 0) {
-                    this.log_warn("Skip display channel 0.");
-                } else if (chans.channels[i].id == 1) {
-                    this.log_warn("Display channel 1.");
-                    this.display = new SpiceDisplayConn(conn);
+                if (chans.channels[i].id == 0 || chans.channels[i].id == 1) {
+                    this.log_warn("Display channel " + chans.channels[i].id);
+                    var display = new SpiceDisplayConn(conn);
+                    if (!this.displays) this.displays = [];
+                    this.displays.push(display);
+                    
+                    // 创建关闭按钮
+                    var closeBtn = document.createElement('button');
+                    closeBtn.textContent = '关闭显示 ' + chans.channels[i].id;
+                    closeBtn.onclick = (function(d) {
+                        return function() {
+                            d.cleanup();
+                            d.destroy_surfaces();
+                            var container = document.getElementById(d.screen_id);
+                            if (container) container.remove();
+                        };
+                    })(display);
+                    document.getElementById('spice-area').appendChild(closeBtn);
                 } else {
-                    this.log_warn("The spice-html5 client does not handle multiple heads." + chans.channels[i].id);
+                    this.log_warn("The spice-html5 client does not handle more than 2 heads." + chans.channels[i].id);
                 }
             }
             else if (chans.channels[i].type == Constants.SPICE_CHANNEL_INPUTS)
@@ -316,11 +329,13 @@ SpiceMainConn.prototype.stop = function(msg)
         this.cursor = undefined;
     }
 
-    if (this.display)
+    if (this.displays)
     {
-        this.display.cleanup();
-        this.display.destroy_surfaces();
-        this.display = undefined;
+        for (var i = 0; i < this.displays.length; i++) {
+            this.displays[i].cleanup();
+            this.displays[i].destroy_surfaces();
+        }
+        this.displays = undefined;
     }
 
     this.cleanup();
