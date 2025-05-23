@@ -186,10 +186,20 @@
             }
 
             function display_hostname() {
-                var title = new URLSearchParams(window.location.search);
-                name = title.getAll('title');
-                name = name.split('(')[0];
-                document.getElementById('hostname').innerHTML = (name);
+                var titleParams = new URLSearchParams(window.location.search);
+                var titles = titleParams.getAll('title');
+                var name = "Remote Console"; // Default hostname
+
+                if (titles.length > 0 && typeof titles[0] === 'string') {
+                    var firstTitle = titles[0];
+                    if (firstTitle) { // Ensure the title is not an empty string before splitting
+                        var splitName = firstTitle.split('(')[0].trim();
+                        if (splitName) { // Ensure the name is not empty after split and trim
+                            name = splitName;
+                        }
+                    }
+                }
+                document.getElementById('hostname').innerHTML = name;
             }
 
             function open_nav() {

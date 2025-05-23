@@ -461,17 +461,14 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
                             this.log_info("H264 decoder initialization completed, ready to receive video stream data");
                         })
                         .catch((e) => {
-                            this.log_warn("H264 decoder initialization failed");
-                            this.log_warn("Error details: " + e.message);
-                            this.log_warn("Error stack: " + e.stack);
+                            this.log_warn("H264 decoder initialization failed.");
+                            this.log_warn("Error message: " + (e.message || "No message"));
+                            this.log_warn("Error stack: " + (e.stack || "No stack trace"));
                             if (e instanceof DOMException) {
                                 this.log_warn("DOM Exception code: " + e.code + ", name: " + e.name);
                             }
-                            this.log_info("System information:");
-                            this.log_info("- User agent: " + navigator.userAgent);
-                            this.log_info("- Platform: " + navigator.platform);
-                            this.log_info("- Memory: " + (navigator.deviceMemory ? navigator.deviceMemory + 'GB' : 'Unknown'));
-                            this.h264decoder = null;
+                            this.log_info("Attempting to continue with other display operations despite H264 init failure.");
+                            this.h264decoder = null; // Ensure it's nullified if init fails
                         });
                 } catch (e) {
                     this.log_warn("Failed to create H264 decoder instance");
@@ -709,11 +706,19 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
                 this.h264decoder = new H264Decoder();
                 this.h264decoder.init(m.stream_width, m.stream_height).then(() => {
                     this.log_info("H264 decoder initialized successfully");
-                }).catch(e => {
-                    this.log_warn("H264 decoder initialization failed: " + e.message);
+                }).catch((e) => {
+                    this.log_warn("H264 decoder initialization failed.");
+                    this.log_warn("Error message: " + (e.message || "No message"));
+                    this.log_warn("Error stack: " + (e.stack || "No stack trace"));
+                    if (e instanceof DOMException) {
+                        this.log_warn("DOM Exception code: " + e.code + ", name: " + e.name);
+                    }
+                    this.log_info("Attempting to continue with other display operations despite H264 init failure.");
+                    this.h264decoder = null; // Ensure it's nullified if init fails
                 });
             } catch (e) {
                 this.log_warn("Failed to create H264 decoder: " + e.message);
+                this.h264decoder = null; // Also nullify if the constructor itself fails
             }
         }
         else if (m.codec_type == Constants.SPICE_VIDEO_CODEC_TYPE_MJPEG)

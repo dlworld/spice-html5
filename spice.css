@@ -8,7 +8,7 @@ body {
     line-height: 1.5;
 }
 
-* { margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; } /* Apply box-sizing globally */
 
 button {
     cursor: pointer;
@@ -20,7 +20,7 @@ button {
     font-size: 14px;
     font-weight: 500;
     padding: 8px 16px;
-    margin: 8px;
+    margin: 8px; /* Default margin for buttons, can be overridden */
     transition: all 0.3s ease;
 }
 
@@ -103,10 +103,13 @@ button:active {
     color: #333;
 }
 
-canvas {
+canvas { /* Style for the canvas elements themselves */
     border: 1px solid #ddd;
     border-radius: 4px;
-    margin: 4px;
+    margin: 4px; /* Margin within .spice-screen */
+    display: block; /* Ensure canvas behaves as a block, helps with layout */
+    max-width: 100%; /* Make canvas responsive within its parent .spice-screen */
+    height: auto;   /* Maintain aspect ratio */
 }
 
 #login {
@@ -125,29 +128,49 @@ canvas {
 }
 
 #spice-area {
-    height: 100%;
+    --spice-gap: 16px; /* Define gap as a CSS variable */
     width: 100%;
+    min-height: calc(100vh - 70px); /* Adjust 70px based on #login height, ensure full viewport usable area */
     margin: 0 auto;
-    padding: 16px;
+    padding: var(--spice-gap);
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    align-items: flex-start;
-    gap: 16px;
-    box-sizing: border-box;
+    align-items: flex-start; /* Align items to the top of each row */
+    gap: var(--spice-gap);
+    /* box-sizing: border-box; already global */
 }
 
 .spice-screen {
-    min-height: 400px;
-    flex: 1;
-    min-width: 300px;
-    max-width: calc(50% - 16px);
+    min-height: 400px; /* Minimum height for the screen container */
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 320px;   /* Base width for screens */
+    min-width: 300px;    /* Absolute minimum width */
+    max-width: 800px;    /* Max width for a single screen, allowing flexibility */
     text-align: center;
     padding: 8px;
     background-color: #fff;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin: 0; /* Let gap property handle spacing */
+    display: flex; /* Make .spice-screen a flex container for its children (canvas) */
+    flex-direction: column; /* Stack children vertically */
+    justify-content: center; /* Center canvas if it's smaller than min-height */
+    align-items: center;
 }
+
+/* Style for buttons directly under #spice-area to make them distinct */
+#spice-area > button {
+    flex-basis: 100%; /* Take full width on their own line */
+    max-width: 400px; /* Sensible max width for these buttons */
+    margin-top: 8px;
+    margin-bottom: 8px;
+    margin-left: auto;  /* Center the button block */
+    margin-right: auto;
+    /* text-align: center; is default for button content usually */
+}
+
 
 .spice-message {
     width: 100%;
